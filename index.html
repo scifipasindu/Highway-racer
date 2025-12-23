@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Highway Racer 3D - Challenge Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Roboto:wght@400;700&display=swap');
+        
+        body {
+            font-family: 'Roboto', sans-serif;
+            overflow: hidden;
+            touch-action: none;
+        }
+        
+        .retro-font {
+            font-family: 'Press Start 2P', cursive;
+        }
+
+        .scanlines {
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.2) 50%,
+                rgba(0,0,0,0.2)
+            );
+            background-size: 100% 4px;
+            pointer-events: none;
+        }
+        
+        .road-texture {
+            background-color: #2d3748;
+            background-image: url("data:image/svg+xml,%3Csvg width='6' height='6' viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%231a202c' fill-opacity='0.4' fill-rule='evenodd'%3E%3Cpath d='M5 0h1v1H5zM0 5h1v1H0z'/%3E%3C/g%3E%3C/svg%3E");
+        }
+
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+
+        .shake-screen {
+            animation: shake 0.5s;
+            animation-iteration-count: 1;
+        }
+
+        @keyframes busted-flash {
+            0% { background-color: rgba(239, 68, 68, 0.3); }
+            50% { background-color: rgba(59, 130, 246, 0.3); }
+            100% { background-color: rgba(239, 68, 68, 0.3); }
+        }
+        .busted-overlay {
+            animation: busted-flash 0.5s infinite;
+        }
+
+        @keyframes level-up-anim {
+            0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+            10% { transform: translate(-50%, -50%) scale(1.1); opacity: 1; }
+            90% { transform: translate(-50%, -50%) scale(1.0); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+        }
+        .level-up-active {
+            animation: level-up-anim 3s forwards;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 h-screen w-screen flex flex-col items-center justify-center text-white relative">
+
+    <!-- Game Container -->
+    <div id="game-container" class="relative w-full max-w-md h-full max-h-[900px] shadow-2xl overflow-hidden border-x-4 border-gray-800 bg-gray-800">
+        
+        <!-- Canvas Layer -->
+        <canvas id="gameCanvas" class="block w-full h-full road-texture"></canvas>
+        
+        <!-- Scanline Overlay -->
+        <div class="absolute inset-0 scanlines z-10 opacity-30 pointer-events-none"></div>
+
+        <!-- Busted Overlay -->
+        <div id="bustedOverlay" class="hidden absolute inset-0 z-40 busted-overlay pointer-events-none"></div>
+
+        <!-- Level Up Overlay -->
+        <div id="levelUpOverlay" class="hidden absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-40 pointer-events-none text-center w-full">
+            <h2 class="text-4xl md:text-5xl text-yellow-400 retro-font" style="text-shadow: 4px 4px 0 #000;">LEVEL UP!</h2>
+            <div id="levelTitle" class="text-xl md:text-2xl text-cyan-400 retro-font mt-4" style="text-shadow: 2px 2px 0 #000;">WARM UP</div>
+        </div>
+
+        <!-- Pause Screen -->
+        <div id="pauseScreen" class="hidden absolute inset-0 z-50 flex flex-col items-center justify-center bg-gray-900/90 backdrop-blur-sm">
+            <h2 class="text-4xl text-white mb-8 retro-font tracking-widest">PAUSED</h2>
+            <div class="flex flex-col gap-4 w-56">
+                <button onclick="togglePause()" class="bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-3 px-6 rounded retro-font text-xs shadow-[0px_4px_0_0_#b45309] active:translate-y-1 active:shadow-none">
+                    RESUME
+                </button>
+                <button onclick="startGame()" class="bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-6 rounded retro-font text-xs shadow-[0px_4px_0_0_#991b1b] active:translate-y-1 active:shadow-none">
+                    RESTART
+                </button>
+                <button onclick="quitGame()" class="bg-gray-600 hover:bg-gray-500 text-white font-bold py-3 px-6 rounded retro-font text-xs shadow-[0px_4px_0_0_#4b5563] active:translate-y-1 active:shadow-none">
+                    QUIT TO MENU
+                </button>
+            </div>
+        </div>
+
+        <!-- HUD (Heads Up Display) -->
+        <div class="absolute top-0 left-0 w-full p-4 z-20 flex justify-between items-start pointer-events-none">
+            
+            <!-- Left Side: Stats -->
+            <div class="flex flex-col gap-2 w-32">
+                <!-- Score -->
+                <div>
+                    <div class="text-[10px] text-gray-400 uppercase tracking-widest">Score</div>
+                    <div id="scoreDisplay" class="text-xl font-bold text-yellow-400 retro-font">0</div>
+                </div>
+
+                <!-- Level -->
+                <div>
+                    <div class="text-[10px] text-gray-400 uppercase tracking-widest">Level</div>
+                    <div id="levelDisplay" class="text-xl font-bold text-cyan-400 retro-font">1</div>
+                </div>
+
+                <!-- Health Bar -->
+                <div class="w-full">
+                    <div class="flex justify-between text-[10px] text-gray-400 mb-1">
+                        <span>REPAIR</span>
+                        <span id="healthText">100%</span>
+                    </div>
+                    <div class="w-full bg-gray-700 h-3 rounded-sm border border-gray-600 overflow-hidden">
+                        <div id="healthBar" class="h-full bg-green-500 transition-all duration-200" style="width: 100%"></div>
+                    </div>
+                </div>
+
+                <!-- Fuel Bar -->
+                <div class="w-full">
+                    <div class="flex justify-between text-[10px] text-gray-400 mb-1">
+                        <span>PETROL</span>
+                        <span id="fuelText">100%</span>
+                    </div>
+                    <div class="w-full bg-gray-700 h-3 rounded-sm border border-gray-600 overflow-hidden">
+                        <div id="fuelBar" class="h-full bg-yellow-500 transition-all duration-200" style="width: 100%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Side: Controls & Status -->
+            <div class="flex flex-col items-end gap-2 pointer-events-auto">
+                <!-- Pause Button -->
+                <button onclick="togglePause()" class="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded border border-gray-500 shadow-md active:bg-gray-800 transition-colors" title="Pause Game (ESC)">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </button>
+
+                <div class="text-right pointer-events-none mt-2">
+                    <div class="text-[10px] text-gray-400 uppercase tracking-widest">High Score</div>
+                    <div id="highScoreDisplay" class="text-lg font-bold text-white retro-font mb-2">0</div>
+                    
+                    <!-- Active Powerups -->
+                    <div id="shieldStatus" class="hidden text-blue-400 text-[10px] uppercase tracking-widest animate-pulse font-bold bg-blue-900/50 px-2 py-1 rounded mb-1">
+                        SHIELD ACTIVE
+                    </div>
+                    <div id="magnetStatus" class="hidden text-purple-400 text-[10px] uppercase tracking-widest animate-pulse font-bold bg-purple-900/50 px-2 py-1 rounded">
+                        MAGNET ON
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Warning Messages -->
+        <div id="warningMsg" class="hidden absolute top-1/3 left-1/2 transform -translate-x-1/2 text-red-500 retro-font text-sm animate-pulse z-30 font-bold tracking-widest bg-black/50 px-4 py-2 rounded">
+            LOW FUEL!
+        </div>
+
+        <!-- Start Screen -->
+        <div id="startScreen" class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-gray-900/95 backdrop-blur-sm transition-opacity duration-300">
+            <h1 class="text-4xl md:text-5xl text-yellow-400 mb-2 retro-font text-center leading-relaxed" style="text-shadow: 4px 4px 0 #000; transform: skew(-5deg);">STREET<br>RUSH <span class="text-sm block text-white mt-2">CHALLENGE EDITION</span></h1>
+            
+            <div class="space-y-4 w-64 text-center relative mt-6">
+                <button onclick="startGame()" class="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-4 px-6 rounded shadow-[0px_6px_0_0_#b45309] active:shadow-none active:translate-y-2 transition-all retro-font text-xs">
+                    START ENGINE
+                </button>
+                
+                <button onclick="toggleInstructions()" class="w-12 h-12 absolute -right-16 top-0 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-full shadow-[0px_4px_0_0_#1e3a8a] active:shadow-none active:translate-y-1 transition-all retro-font text-xl flex items-center justify-center">
+                    ?
+                </button>
+            </div>
+            
+            <div class="mt-8 text-xs text-gray-500 text-center">
+                <p>Complete Levels and Face Unique Challenges!</p>
+            </div>
+        </div>
+
+        <!-- Instructions Modal -->
+        <div id="instructionsModal" class="hidden absolute inset-0 z-[60] bg-gray-900 flex flex-col p-6 overflow-y-auto">
+            <div class="flex justify-between items-center mb-6 border-b border-gray-700 pb-4">
+                <h2 class="text-xl text-yellow-400 retro-font">HOW TO PLAY</h2>
+                <button onclick="toggleInstructions()" class="text-red-500 font-bold text-xl hover:text-red-400">X</button>
+            </div>
+            
+            <div class="space-y-6 text-sm text-gray-300">
+                <div class="bg-gray-800 p-4 rounded border border-gray-700">
+                    <h3 class="text-white font-bold mb-2 border-b border-gray-600 pb-1">CONTROLS</h3>
+                     <ul class="list-disc pl-4 space-y-1">
+                        <li><span class="text-yellow-400">Arrow Keys / Tap</span> to steer.</li>
+                        <li><span class="text-yellow-400">Up Arrow</span> for Turbo.</li>
+                        <li><span class="text-yellow-400">ESC</span> to Pause/Resume.</li>
+                    </ul>
+                </div>
+                <div class="bg-gray-800 p-4 rounded border border-gray-700">
+                     <h3 class="text-white font-bold mb-2 border-b border-gray-600 pb-1">LEVEL CHALLENGES</h3>
+                     <ul class="list-disc pl-4 space-y-1 text-xs">
+                        <li><span class="text-cyan-400">Night Cruise:</span> Reduced visibility.</li>
+                        <li><span class="text-cyan-400">Truck Convoy:</span> Heavy trucks only.</li>
+                        <li><span class="text-cyan-400">Rainy Roads:</span> Slippery & Dark.</li>
+                        <li><span class="text-cyan-400">Police Chase:</span> Avoid arrest!</li>
+                     </ul>
+                </div>
+            </div>
+
+            <button onclick="toggleInstructions()" class="mt-8 w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded retro-font text-xs">
+                GOT IT!
+            </button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="gameOverScreen" class="hidden absolute inset-0 z-50 flex flex-col items-center justify-center bg-red-900/90 backdrop-blur-sm">
+            <h2 id="deathReason" class="text-3xl text-red-300 mb-2 retro-font text-center uppercase drop-shadow-md">CRASHED!</h2>
+            <div class="text-center mb-8">
+                <div class="text-sm text-red-200">FINAL SCORE</div>
+                <div id="finalScore" class="text-3xl text-yellow-400 retro-font mt-2">0</div>
+                <div class="text-sm text-cyan-200 mt-2">REACHED <span id="finalLevelName">LEVEL 1</span></div>
+            </div>
+            
+            <div class="flex flex-col gap-4 w-56">
+                <button onclick="startGame()" class="bg-white hover:bg-gray-200 text-red-900 font-bold py-3 px-8 rounded shadow-[0px_6px_0_0_#991b1b] active:shadow-none active:translate-y-2 transition-all retro-font text-xs">
+                    TRY AGAIN
+                </button>
+                <button onclick="quitGame()" class="bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 px-8 rounded shadow-[0px_6px_0_0_#1f2937] active:shadow-none active:translate-y-2 transition-all retro-font text-xs">
+                    MAIN MENU
+                </button>
+            </div>
+        </div>
+
+        <!-- Touch Controls (Mobile) -->
+        <div id="mobileControls" class="absolute bottom-0 w-full h-1/3 z-40 flex md:hidden pointer-events-auto">
+            <div id="btnLeft" class="w-1/2 h-full active:bg-white/5 transition-colors"></div>
+            <div id="btnRight" class="w-1/2 h-full active:bg-white/5 transition-colors"></div>
+        </div>
+        
+        <!-- Turbo Indicator -->
+        <div id="turboIndicator" class="hidden absolute bottom-20 left-1/2 transform -translate-x-1/2 text-cyan-400 retro-font text-xs tracking-widest animate-pulse z-20 bg-black/50 px-2 rounded border border-cyan-400 pointer-events-none">
+            NITROUS
+        </div>
+
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('game-container');
+        
+        // Game State
+        let gameLoopId;
+        let isPlaying = false;
+        let isPaused = false;
+        let score = 0;
+        let speed = 5;
+        let trafficSpeed = 3;
+        let frameCount = 0;
+        let highScore = localStorage.getItem('carGameHighScore') || 0;
+        let turboMode = false;
+        
+        // Leveling
+        let level = 1;
+        let nextLevelScore = 500;
+        let spawnRateBase = 80;
+        
+        // Level Configurations
+        const levelConfigs = {
+            1: { name: "WARM UP", traffic: 'mixed', darkness: 0.0, rain: false, spawnRate: 80, speedMod: 0 },
+            2: { name: "NIGHT CRUISE", traffic: 'mixed', darkness: 0.5, rain: false, spawnRate: 75, speedMod: 0.5 },
+            3: { name: "TRUCK CONVOY", traffic: 'heavy', darkness: 0.1, rain: false, spawnRate: 90, speedMod: 0.2 }, // More trucks, slightly slower spawn but big obstacles
+            4: { name: "RAINY ROADS", traffic: 'mixed', darkness: 0.3, rain: true, spawnRate: 70, speedMod: 0.8 },
+            5: { name: "POLICE CHASE", traffic: 'police', darkness: 0.1, rain: false, spawnRate: 65, speedMod: 1.2 }, // More police
+            6: { name: "RUSH HOUR", traffic: 'mixed', darkness: 0.0, rain: false, spawnRate: 40, speedMod: 1.5 },
+            7: { name: "THE STORM", traffic: 'mixed', darkness: 0.6, rain: true, spawnRate: 50, speedMod: 1.8 },
+            8: { name: "CHAOS", traffic: 'chaos', darkness: 0.3, rain: true, spawnRate: 30, speedMod: 2.2 }
+        };
+
+        // Advanced Stats
+        let fuel = 100;
+        let health = 100;
+        let maxFuel = 100;
+        let maxHealth = 100;
+        let isInvulnerable = false;
+        let invulnerabilityTimer = 0;
+        let isMagnetActive = false;
+        let magnetTimer = 0;
+
+        // Environment
+        let darkness = 0; 
+        let isRaining = false;
+        let rainDrops = [];
+
+        // Colors
+        const playerColor = '#ef4444'; 
+        const enemyColors = ['#3b82f6', '#8b5cf6', '#6366f1', '#10b981']; 
+
+        // Dimensions
+        let roadWidth = 300;
+        let laneWidth = 100;
+        let carWidth = 50;
+        let carHeight = 80;
+        
+        // Entities
+        let player = { x: 0, y: 0, w: carWidth, h: carHeight, speed: 5, dx: 0, color: playerColor };
+        let traffic = [];
+        let items = []; 
+        let particles = [];
+
+        // Input State
+        const keys = {
+            ArrowLeft: false,
+            ArrowRight: false,
+            ArrowUp: false
+        };
+
+        // Initialize Screen
+        function resize() {
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            roadWidth = Math.min(canvas.width * 0.9, 400);
+            laneWidth = roadWidth / 3;
+            
+            if (!isPlaying) {
+                player.x = canvas.width / 2 - player.w / 2;
+                player.y = canvas.height - player.h - 100;
+            }
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        document.getElementById('highScoreDisplay').innerText = highScore;
+
+        // Input Listeners
+        window.addEventListener('keydown', (e) => { 
+            if (e.code === 'Escape') togglePause();
+            if(keys.hasOwnProperty(e.code)) keys[e.code] = true; 
+        });
+        window.addEventListener('keyup', (e) => { 
+            if(keys.hasOwnProperty(e.code)) keys[e.code] = false; 
+        });
+
+        const btnLeft = document.getElementById('btnLeft');
+        const btnRight = document.getElementById('btnRight');
+        const handleTouchStart = (dir) => (e) => { e.preventDefault(); keys[dir] = true; };
+        const handleTouchEnd = (dir) => (e) => { e.preventDefault(); keys[dir] = false; };
+        btnLeft.addEventListener('touchstart', handleTouchStart('ArrowLeft'));
+        btnLeft.addEventListener('touchend', handleTouchEnd('ArrowLeft'));
+        btnRight.addEventListener('touchstart', handleTouchStart('ArrowRight'));
+        btnRight.addEventListener('touchend', handleTouchEnd('ArrowRight'));
+        
+        // --- Helpers ---
+
+        function toggleInstructions() {
+            const modal = document.getElementById('instructionsModal');
+            modal.classList.toggle('hidden');
+        }
+
+        function togglePause() {
+            if (!isPlaying && !isPaused) return; 
+            isPaused = !isPaused;
+            const pauseScreen = document.getElementById('pauseScreen');
+            if (isPaused) {
+                pauseScreen.classList.remove('hidden');
+                cancelAnimationFrame(gameLoopId); 
+            } else {
+                pauseScreen.classList.add('hidden');
+                loop(); 
+            }
+        }
+
+        function quitGame() {
+            isPlaying = false;
+            isPaused = false;
+            cancelAnimationFrame(gameLoopId);
+            
+            // Hide game UI
+            document.getElementById('pauseScreen').classList.add('hidden');
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            document.getElementById('mobileControls').style.display = 'none';
+            document.getElementById('turboIndicator').classList.add('hidden');
+            document.getElementById('bustedOverlay').classList.add('hidden');
+            document.getElementById('levelUpOverlay').classList.add('hidden');
+
+            // Show Start Screen
+            document.getElementById('startScreen').classList.remove('hidden');
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawRoad(); 
+        }
+
+        function adjustColor(color, amount) {
+            if (!color) return '#000000';
+            return '#' + color.replace(/^#/, '').replace(/../g, color => ('0'+Math.min(255, Math.max(0, parseInt(color, 16) + amount)).toString(16)).substr(-2));
+        }
+
+        // --- Game Logic ---
+
+        function getLevelConfig(lvl) {
+            if (lvl > 8) return levelConfigs[8]; // Cap at level 8 config for now
+            return levelConfigs[lvl] || levelConfigs[1];
+        }
+
+        function levelUp() {
+            level++;
+            nextLevelScore += 500 + (level * 200); 
+            
+            const config = getLevelConfig(level);
+            
+            // Apply Immediate Changes
+            spawnRateBase = config.spawnRate;
+            trafficSpeed += 0.5 + config.speedMod;
+
+            // Show Message
+            const el = document.getElementById('levelUpOverlay');
+            const title = document.getElementById('levelTitle');
+            title.innerText = config.name;
+            
+            el.classList.remove('hidden');
+            el.classList.add('level-up-active');
+
+            setTimeout(() => {
+                el.classList.add('hidden');
+                el.classList.remove('level-up-active');
+            }, 3000);
+        }
+
+        function createTraffic() {
+            const lane = Math.floor(Math.random() * 3);
+            const laneX = (canvas.width / 2 - roadWidth / 2) + (lane * laneWidth) + (laneWidth - carWidth) / 2;
+            
+            if (traffic.length > 0 && traffic[traffic.length-1].y < -50) return;
+
+            const config = getLevelConfig(level);
+            const rand = Math.random();
+            let type = 'car';
+            let height = 80;
+            let color = enemyColors[Math.floor(Math.random() * enemyColors.length)];
+            let carSpeed = trafficSpeed + Math.random() * 1.5;
+
+            // Traffic Generation Logic based on Level Type
+            let truckChance = 0.2;
+            let policeChance = 0.05;
+
+            if (config.traffic === 'heavy') { truckChance = 0.6; }
+            if (config.traffic === 'police') { policeChance = 0.3; }
+            if (config.traffic === 'chaos') { truckChance = 0.4; policeChance = 0.2; }
+
+            if (rand < truckChance) { 
+                type = 'truck';
+                height = 160;
+                color = '#718096';
+                carSpeed *= 0.8; 
+            } else if (rand > (1.0 - policeChance)) { 
+                type = 'police';
+                color = '#1e293b';
+                carSpeed *= 1.4; // Police faster
+            }
+
+            traffic.push({
+                x: laneX,
+                y: -height - 50,
+                w: carWidth,
+                h: height,
+                color: color,
+                speed: carSpeed,
+                type: type
+            });
+        }
+
+        function createItem() {
+            const lane = Math.floor(Math.random() * 3);
+            const laneX = (canvas.width / 2 - roadWidth / 2) + (lane * laneWidth) + (laneWidth - 40) / 2; 
+            const rand = Math.random();
+            let type = 'fuel';
+            
+            if (rand < 0.4) type = 'fuel';
+            else if (rand < 0.65) type = 'coin';
+            else if (rand < 0.8) type = 'repair';
+            else if (rand < 0.9) type = 'shield';
+            else type = 'magnet';
+            
+            items.push({
+                x: laneX,
+                y: -100,
+                w: 40,
+                h: 40,
+                type: type,
+                speed: trafficSpeed
+            });
+        }
+
+        function createParticle(x, y, color, speed, sizeMultiplier = 1) {
+            particles.push({
+                x: x,
+                y: y,
+                size: (Math.random() * 4 + 2) * sizeMultiplier,
+                color: color,
+                vx: (Math.random() - 0.5) * 4,
+                vy: (Math.random() - 0.5) * 4 + speed,
+                life: 1.0
+            });
+        }
+
+        function createRain() {
+             for(let i=0; i<3; i++){
+                rainDrops.push({
+                    x: Math.random() * canvas.width,
+                    y: -20,
+                    l: Math.random() * 20 + 10,
+                    v: Math.random() * 10 + 20
+                });
+             }
+        }
+
+        function draw3DBlock(ctx, x, y, w, h, depth, color, isPlayer) {
+            ctx.fillStyle = 'rgba(0,0,0,0.4)';
+            ctx.fillRect(x + 10, y + 10, w, h);
+
+            const sideColor = adjustColor(color, -60);
+            const topColor = color;
+            const frontColor = adjustColor(color, -30);
+            
+            ctx.fillStyle = '#111';
+            ctx.fillRect(x - 2, y + h - 15, 6, 12);
+            ctx.fillRect(x + w - 4, y + h - 15, 6, 12);
+            ctx.fillRect(x - 2, y + 10, 6, 12);
+            ctx.fillRect(x + w - 4, y + 10, 6, 12);
+
+            const bodyH = depth; 
+            ctx.fillStyle = sideColor;
+            ctx.fillRect(x + w, y - bodyH + 10, 8, h - 10);
+            
+            ctx.fillStyle = frontColor;
+            ctx.fillRect(x, y + h - 10, w, 10);
+
+            ctx.fillStyle = topColor;
+            ctx.fillRect(x, y - bodyH, w, h);
+
+            const roofM = 6;
+            const roofH = 12;
+            
+            ctx.fillStyle = '#111';
+            ctx.fillRect(x + w - roofM, y - bodyH + 15 - roofH, 4, h - 35);
+
+            ctx.fillStyle = '#222';
+            if (color === '#718096') { 
+                 ctx.fillStyle = adjustColor(color, 20);
+                 ctx.fillRect(x + 4, y - bodyH - 10, w - 8, h - 10);
+            } else {
+                 ctx.fillRect(x + roofM, y - bodyH + 15 - roofH, w - roofM*2, h - 35);
+            }
+        }
+
+        function drawCar(car, isPlayer) {
+            if (isPlayer && isInvulnerable && Math.floor(Date.now() / 100) % 2 === 0 && invulnerabilityTimer < 250) return; 
+
+            if (isPlayer && isInvulnerable) {
+                ctx.save();
+                ctx.strokeStyle = '#3b82f6';
+                ctx.lineWidth = 3;
+                ctx.globalAlpha = 0.6 + Math.sin(frameCount * 0.2) * 0.3;
+                ctx.beginPath();
+                ctx.arc(car.x + car.w/2, car.y + car.h/2, Math.max(car.w, car.h)/1.1, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+            
+            if (isPlayer && isMagnetActive) {
+                ctx.save();
+                ctx.strokeStyle = '#9333ea'; 
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.arc(car.x + car.w/2, car.y + car.h/2, 100 + Math.sin(frameCount * 0.2) * 10, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            let depth = 15;
+            if (car.type === 'truck') depth = 30;
+            if (car.type === 'police') depth = 15;
+
+            draw3DBlock(ctx, car.x, car.y, car.w, car.h, depth, car.color, isPlayer);
+
+            const bodyY = car.y - depth;
+
+            if (isPlayer) {
+                ctx.fillStyle = '#fbbf24'; 
+                ctx.fillRect(car.x + 5, bodyY + 2, 8, 5);
+                ctx.fillRect(car.x + car.w - 13, bodyY + 2, 8, 5);
+                
+                if (darkness > 0.3) {
+                    ctx.save();
+                    ctx.globalAlpha = darkness * 0.6;
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath();
+                    ctx.moveTo(car.x + 9, bodyY + 2);
+                    ctx.lineTo(car.x - 20, bodyY - 150);
+                    ctx.lineTo(car.x + 40, bodyY - 150);
+                    ctx.lineTo(car.x + 13, bodyY + 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(car.x + car.w - 9, bodyY + 2);
+                    ctx.lineTo(car.x + car.w - 40, bodyY - 150);
+                    ctx.lineTo(car.x + car.w + 20, bodyY - 150);
+                    ctx.lineTo(car.x + car.w - 13, bodyY + 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+
+                ctx.fillStyle = '#991b1b'; 
+                ctx.fillRect(car.x + 5, bodyY + car.h - 5, 10, 3);
+                ctx.fillRect(car.x + car.w - 15, bodyY + car.h - 5, 10, 3);
+            } else {
+                ctx.fillStyle = '#ef4444'; 
+                ctx.fillRect(car.x + 5, bodyY + car.h - 5, 8, 4);
+                ctx.fillRect(car.x + car.w - 13, bodyY + car.h - 5, 8, 4);
+
+                if (car.type === 'police') {
+                    ctx.fillStyle = '#111';
+                    ctx.fillRect(car.x + 10, bodyY + 20, car.w - 20, 4);
+                    
+                    if (Math.floor(frameCount / 10) % 2 === 0) {
+                        ctx.fillStyle = '#ef4444';
+                        ctx.fillRect(car.x + 10, bodyY + 18, 12, 8);
+                        ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 15;
+                        ctx.fillRect(car.x + 10, bodyY + 18, 12, 8);
+                        
+                        ctx.shadowBlur = 0;
+                        ctx.fillStyle = '#3b82f6';
+                        ctx.fillRect(car.x + car.w - 22, bodyY + 18, 12, 8);
+                    } else {
+                        ctx.fillStyle = '#ef4444'; 
+                        ctx.fillRect(car.x + 10, bodyY + 18, 12, 8);
+
+                        ctx.fillStyle = '#3b82f6';
+                        ctx.fillRect(car.x + car.w - 22, bodyY + 18, 12, 8);
+                        ctx.shadowColor = '#3b82f6'; ctx.shadowBlur = 15;
+                        ctx.fillRect(car.x + car.w - 22, bodyY + 18, 12, 8);
+                        ctx.shadowBlur = 0;
+                    }
+                }
+            }
+        }
+
+        function drawItemObj(item) {
+            const x = item.x;
+            const y = item.y;
+            const size = item.w;
+
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = 'rgba(255,255,255,0.3)';
+
+            if (item.type === 'fuel') {
+                ctx.fillStyle = '#eab308'; 
+                ctx.beginPath(); ctx.roundRect(x, y + 5, size, size - 5, 4); ctx.fill();
+                ctx.fillStyle = '#000'; ctx.font = 'bold 10px sans-serif'; ctx.fillText('GAS', x + 8, y + 25);
+            } else if (item.type === 'repair') {
+                ctx.fillStyle = '#f3f4f6'; 
+                ctx.beginPath(); ctx.roundRect(x, y + 5, size, size - 10, 4); ctx.fill();
+                ctx.fillStyle = '#ef4444'; ctx.fillRect(x + size/2 - 4, y + 10, 8, 20); ctx.fillRect(x + 5, y + 16, 30, 8);
+            } else if (item.type === 'shield') {
+                ctx.fillStyle = '#3b82f6';
+                ctx.beginPath();
+                ctx.moveTo(x + size/2, y + size);
+                ctx.quadraticCurveTo(x, y + size/1.5, x, y + size/3);
+                ctx.lineTo(x, y);
+                ctx.lineTo(x + size, y);
+                ctx.lineTo(x + size, y + size/3);
+                ctx.quadraticCurveTo(x + size, y + size/1.5, x + size/2, y + size);
+                ctx.fill();
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+            } else if (item.type === 'coin') {
+                ctx.fillStyle = '#fbbf24';
+                ctx.beginPath(); ctx.arc(x + size/2, y + size/2, size/2 - 2, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#d97706'; ctx.lineWidth = 2; ctx.stroke();
+                ctx.fillStyle = '#b45309'; ctx.font = 'bold 20px serif'; ctx.fillText('$', x + 14, y + 27);
+            } else if (item.type === 'magnet') {
+                ctx.fillStyle = '#9333ea'; 
+                ctx.beginPath();
+                ctx.arc(x + size/2, y + size/2, size/2 - 4, Math.PI, 0); 
+                ctx.lineTo(x + size - 4, y + size - 4);
+                ctx.lineTo(x + size/2 + 4, y + size - 4);
+                ctx.lineTo(x + size/2 + 4, y + size/2);
+                ctx.arc(x + size/2, y + size/2, 4, 0, Math.PI, true); 
+                ctx.lineTo(x + size/2 - 4, y + size - 4);
+                ctx.lineTo(x + 4, y + size - 4);
+                ctx.lineTo(x + 4, y + size/2);
+                ctx.fill();
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
+            }
+            ctx.shadowBlur = 0;
+        }
+
+        function drawRain() {
+            ctx.strokeStyle = 'rgba(174, 194, 224, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let drop of rainDrops) {
+                ctx.moveTo(drop.x, drop.y);
+                ctx.lineTo(drop.x, drop.y + drop.l);
+            }
+            ctx.stroke();
+        }
+
+        function drawRoad() {
+            const centerX = canvas.width / 2;
+            const leftEdge = centerX - roadWidth / 2;
+            const rightEdge = centerX + roadWidth / 2;
+
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.fillRect(leftEdge - 20, 0, 20, canvas.height); 
+            ctx.fillRect(rightEdge, 0, 20, canvas.height); 
+
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 4;
+            
+            ctx.beginPath();
+            ctx.moveTo(leftEdge, 0);
+            ctx.lineTo(leftEdge, canvas.height);
+            ctx.moveTo(rightEdge, 0);
+            ctx.lineTo(rightEdge, canvas.height);
+            ctx.stroke();
+
+            ctx.setLineDash([30, 30]);
+            ctx.lineDashOffset = -frameCount * (speed * 2); 
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+
+            ctx.beginPath();
+            ctx.moveTo(leftEdge + laneWidth, -50);
+            ctx.lineTo(leftEdge + laneWidth, canvas.height);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(leftEdge + laneWidth * 2, -50);
+            ctx.lineTo(leftEdge + laneWidth * 2, canvas.height);
+            ctx.stroke();
+
+            ctx.setLineDash([]); 
+        }
+
+        function updateHUD() {
+            const fuelBar = document.getElementById('fuelBar');
+            fuelBar.style.width = `${Math.max(0, fuel)}%`;
+            document.getElementById('fuelText').innerText = `${Math.floor(fuel)}%`;
+            
+            if (fuel < 20) {
+                fuelBar.classList.replace('bg-yellow-500', 'bg-red-500');
+                document.getElementById('warningMsg').classList.remove('hidden');
+            } else {
+                fuelBar.classList.replace('bg-red-500', 'bg-yellow-500');
+                document.getElementById('warningMsg').classList.add('hidden');
+            }
+
+            const healthBar = document.getElementById('healthBar');
+            healthBar.style.width = `${Math.max(0, health)}%`;
+            document.getElementById('healthText').innerText = `${Math.floor(health)}%`;
+
+            if (health < 30) healthBar.classList.replace('bg-green-500', 'bg-red-600');
+            else healthBar.classList.replace('bg-red-600', 'bg-green-500');
+
+            document.getElementById('scoreDisplay').innerText = Math.floor(score);
+            document.getElementById('levelDisplay').innerText = level;
+            
+            const shieldEl = document.getElementById('shieldStatus');
+            shieldEl.style.display = isInvulnerable ? 'block' : 'none';
+            
+            const magnetEl = document.getElementById('magnetStatus');
+            magnetEl.style.display = isMagnetActive ? 'block' : 'none';
+        }
+
+        function update() {
+            if (!isPlaying || isPaused) return;
+
+            // Environment Management based on Level Config
+            const config = getLevelConfig(level);
+            
+            // Darkness transition
+            let targetDarkness = config.darkness;
+            darkness += (targetDarkness - darkness) * 0.01; // Smooth transition
+
+            // Rain Management
+            isRaining = config.rain;
+            if (isRaining) createRain();
+            
+            for (let i = 0; i < rainDrops.length; i++) {
+                rainDrops[i].y += rainDrops[i].v;
+                if (rainDrops[i].y > canvas.height) {
+                    rainDrops.splice(i, 1);
+                    i--;
+                }
+            }
+
+            // Leveling Logic
+            if (score > nextLevelScore) {
+                levelUp();
+            }
+
+            // Status Timers
+            if (isInvulnerable) { invulnerabilityTimer--; if (invulnerabilityTimer <= 0) isInvulnerable = false; }
+            if (isMagnetActive) { magnetTimer--; if (magnetTimer <= 0) isMagnetActive = false; }
+
+            // Fuel
+            turboMode = keys.ArrowUp;
+            let consumption = turboMode ? 0.08 : 0.04;
+            fuel -= consumption;
+            if (fuel <= 0) { gameOver("OUT OF GAS"); return; }
+
+            const currentSpeed = turboMode ? speed * 1.5 : speed;
+            const currentTrafficSpeed = turboMode ? trafficSpeed * 1.5 : trafficSpeed;
+
+            // Movement
+            if (turboMode) {
+                document.getElementById('turboIndicator').classList.remove('hidden');
+                canvas.style.transform = `translate(${Math.random()*2-1}px, ${Math.random()*2-1}px)`;
+                score += 0.5; 
+                if(frameCount % 5 === 0) {
+                     createParticle(player.x + 10, player.y + player.h, '#666', 2);
+                     createParticle(player.x + player.w - 10, player.y + player.h, '#666', 2);
+                }
+            } else {
+                document.getElementById('turboIndicator').classList.add('hidden');
+                canvas.style.transform = 'none';
+            }
+
+            if (keys.ArrowLeft && player.x > (canvas.width/2 - roadWidth/2)) { player.x -= player.speed; }
+            if (keys.ArrowRight && player.x < (canvas.width/2 + roadWidth/2 - player.w)) { player.x += player.speed; }
+
+            score += 0.1;
+            
+            // Spawners based on Level (using spawnRateBase from config)
+            if (frameCount % Math.max(30, spawnRateBase) === 0) createTraffic();
+            
+            if (frameCount % 150 === 0) createItem();
+
+            // Traffic Collision & Move
+            for (let i = 0; i < traffic.length; i++) {
+                let car = traffic[i];
+                car.y += (currentSpeed - (car.speed * 0.5)); 
+
+                const pad = 8; 
+                if (!isInvulnerable &&
+                    player.x < car.x + car.w - pad &&
+                    player.x + player.w > car.x + pad &&
+                    player.y < car.y + car.h - pad &&
+                    player.y + player.h > car.y + pad
+                ) {
+                    if (car.type === 'police') {
+                        gameOver("BUSTED!");
+                        return;
+                    }
+
+                    health -= 34; 
+                    isInvulnerable = true;
+                    invulnerabilityTimer = 60; 
+                    
+                    container.classList.add('shake-screen');
+                    setTimeout(()=>container.classList.remove('shake-screen'), 500);
+                    
+                    for(let k=0; k<10; k++) createParticle(player.x + player.w/2, player.y, '#fff', -2);
+
+                    traffic.splice(i, 1);
+                    i--;
+                    
+                    if (health <= 0) { gameOver("DESTROYED"); return; }
+                    continue;
+                }
+
+                if (car.y > canvas.height) { traffic.splice(i, 1); i--; score += 10; }
+            }
+
+            // Items Collision & Move
+            for (let i = 0; i < items.length; i++) {
+                let item = items[i];
+                
+                if (isMagnetActive && item.y > 0) {
+                     const dx = (player.x + player.w/2) - (item.x + item.w/2);
+                     const dy = (player.y + player.h/2) - (item.y + item.h/2);
+                     const dist = Math.sqrt(dx*dx + dy*dy);
+                     if (dist < 250) { item.x += dx * 0.1; item.y += dy * 0.1; } 
+                     else { item.y += (currentSpeed - (trafficSpeed * 0.5)); }
+                } else {
+                    item.y += (currentSpeed - (trafficSpeed * 0.5)); 
+                }
+
+                if (player.x < item.x + item.w && player.x + player.w > item.x && player.y < item.y + item.h && player.y + player.h > item.y) {
+                    if (item.type === 'fuel') { fuel = Math.min(maxFuel, fuel + 30); score += 50; }
+                    else if (item.type === 'repair') { health = Math.min(maxHealth, health + 30); score += 50; }
+                    else if (item.type === 'shield') { isInvulnerable = true; invulnerabilityTimer = 300; }
+                    else if (item.type === 'coin') { score += 100; }
+                    else if (item.type === 'magnet') { isMagnetActive = true; magnetTimer = 400; }
+
+                    items.splice(i, 1); i--; continue;
+                }
+                if (item.y > canvas.height) { items.splice(i, 1); i--; }
+            }
+
+            for (let i = 0; i < particles.length; i++) {
+                let p = particles[i];
+                p.x += p.vx; p.y += p.vy; p.life -= 0.05;
+                if (p.life <= 0) { particles.splice(i, 1); i--; }
+            }
+
+            updateHUD();
+            frameCount++;
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawRoad();
+
+            items.forEach(item => drawItemObj(item));
+            traffic.forEach(car => drawCar(car, false));
+            if (isPlaying) drawCar(player, true);
+
+            particles.forEach(p => {
+                ctx.globalAlpha = p.life; ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, p.size, p.size); ctx.globalAlpha = 1.0;
+            });
+
+            if (isRaining) drawRain();
+            if (darkness > 0.05) { ctx.fillStyle = `rgba(0, 0, 10, ${darkness})`; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+        }
+
+        function loop() {
+            if (isPlaying && !isPaused) { 
+                update(); 
+                draw(); 
+                gameLoopId = requestAnimationFrame(loop); 
+            }
+        }
+
+        function startGame() {
+            document.getElementById('startScreen').classList.add('hidden');
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            document.getElementById('bustedOverlay').classList.add('hidden');
+            document.getElementById('pauseScreen').classList.add('hidden');
+            document.getElementById('levelUpOverlay').classList.add('hidden');
+            document.getElementById('mobileControls').style.display = 'flex';
+            
+            resize();
+            traffic = []; items = []; particles = []; rainDrops = [];
+            score = 0; speed = 8; trafficSpeed = 3; frameCount = 0;
+            fuel = 100; health = 100; isInvulnerable = false; isMagnetActive = false;
+            darkness = 0; isRaining = false;
+            
+            // Level Reset
+            level = 1;
+            nextLevelScore = 500;
+            const startConfig = levelConfigs[1];
+            spawnRateBase = startConfig.spawnRate;
+            
+            isPlaying = true;
+            isPaused = false;
+            
+            player.x = canvas.width / 2 - player.w / 2;
+            player.y = canvas.height - player.h - 100;
+            player.color = playerColor; 
+            loop();
+        }
+
+        function gameOver(reason) {
+            isPlaying = false;
+            cancelAnimationFrame(gameLoopId);
+            
+            if (reason === "BUSTED!") {
+                document.getElementById('bustedOverlay').classList.remove('hidden');
+                document.getElementById('deathReason').style.color = '#60a5fa';
+            } else {
+                document.getElementById('deathReason').style.color = '#fca5a5';
+                for(let i=0; i<40; i++) {
+                    createParticle(player.x + player.w/2, player.y + player.h/2, '#ef4444', -5, 2);
+                    createParticle(player.x + player.w/2, player.y + player.h/2, '#fbbf24', -5, 2);
+                }
+            }
+            
+            draw(); 
+            
+            if (Math.floor(score) > highScore) {
+                highScore = Math.floor(score);
+                localStorage.setItem('carGameHighScore', highScore);
+                document.getElementById('highScoreDisplay').innerText = highScore;
+            }
+
+            document.getElementById('deathReason').innerText = reason || "CRASHED!";
+            document.getElementById('finalScore').innerText = Math.floor(score);
+            document.getElementById('finalLevelName').innerText = getLevelConfig(level).name;
+            
+            setTimeout(() => {
+                document.getElementById('gameOverScreen').classList.remove('hidden');
+                document.getElementById('mobileControls').style.display = 'none';
+            }, 1000);
+        }
+
+        resize();
+        drawRoad();
+    </script>
+</body>
+</html>
